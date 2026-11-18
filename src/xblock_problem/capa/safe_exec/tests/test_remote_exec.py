@@ -15,8 +15,8 @@ class TestRemoteExec(TestCase):
     """Tests for remote_exec."""
 
     @override_settings(
-        ENABLE_CODEJAIL_REST_SERVICE=True,
         CODE_JAIL_REST_SERVICE_HOST="http://localhost",
+        CODE_JAIL_REST_SERVICE_REMOTE_EXEC="xblock_problem.capa.safe_exec.remote_exec.send_safe_exec_request_v0",
     )
     @patch("requests.post")
     def test_json_encode(self, mock_post):

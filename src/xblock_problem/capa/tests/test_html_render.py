@@ -10,7 +10,6 @@ from unittest import mock
 import ddt
 from lxml import etree
 
-from xblock_problem.capa.testing.codejail import UseUnsafeCodejail
 from xblock_problem.capa.tests.helpers import mock_capa_system, new_loncapa_problem
 from xblock_problem.markup import HTML
 
@@ -18,7 +17,6 @@ from ..testing.response_xml_factory import CustomResponseXMLFactory, StringRespo
 
 
 @ddt.ddt
-@UseUnsafeCodejail()
 class CapaHtmlRenderTest(unittest.TestCase):
     """
     CAPA HTML rendering tests class.

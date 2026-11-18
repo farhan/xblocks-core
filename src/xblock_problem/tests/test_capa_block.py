@@ -32,7 +32,6 @@ from xblock_problem.block import ComplexEncoder, ProblemBlock
 from xblock_problem.capa import responsetypes
 from xblock_problem.capa.correctmap import CorrectMap
 from xblock_problem.capa.responsetypes import LoncapaProblemError, ResponseError, StudentInputError
-from xblock_problem.capa.testing.codejail import UseUnsafeCodejail
 from xblock_problem.capa.xqueue_interface import XQueueInterface
 from xblock_problem.tests import DATA_DIR
 
@@ -3744,7 +3743,6 @@ class ComplexEncoderTest(unittest.TestCase):
         # ignore quotes
 
 
-@UseUnsafeCodejail()
 @pytest.mark.django_db
 class ProblemCheckTrackingTest(unittest.TestCase):
     """

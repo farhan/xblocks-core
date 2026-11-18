@@ -1,31 +1,65 @@
-"""Codejail controls for tests that execute capa problem code."""
+"""
+Codejail test utilities for suites that execute capa problem code.
 
-import codejail.safe_exec
-from django.test.utils import TestContextDecorator
+This module holds a small wrapper around codejail's ``not_safe_exec`` used to
+mock a remote Codejail REST service call. It is intended to be wired up through
+the ``CODE_JAIL_REST_SERVICE_REMOTE_EXEC`` setting for test runs, so downstream
+suites (notably openedx-platform's) don't need a running Codejail service.
+"""
+
+import sys
+from typing import Any
+
+from codejail.safe_exec import SafeExecException, not_safe_exec
 
 
-class UseUnsafeCodejail(TestContextDecorator):
+def send_safe_exec_request_locally(data: dict[str, Any]) -> tuple[str | None, Exception | None]:
     """
-    Tell codejail to run in unsafe mode for the scope of the decorator.
-    Use this as a decorator on Django TestCase classes or methods.
+    Execute a Codejail payload locally using CodeJail's `not_safe_exec`.
 
-    This is needed because codejail has significant OS-level setup requirements
-    which we don't even attempt to fulfill for unit testing purposes. Running
-    tests in unsafe mode (that is, running code executions in-process, with no
-    sandboxing) is only safe because we control the contents of the unit tests.
-    It's not a perfect replica of how safe mode operates but it's generally good
-    enough for testing the integration and overall behavior.
+    `not_safe_exec` does not properly clean up the environment after running,
+    causing a stale cache between runs that triggers test failures when loading
+    a Python library. We run a cleanup routine that restores the loaded modules
+    and clear the zipimporter cache.
+
+    Arguments:
+        data (dict): Payload with the same shape as the remote service request:
+            code, globals_dict, python_path, extra_files,
+            limit_overrides_context, slug.
+
+    Returns:
+        tuple: ``(emsg, exception)``. ``emsg`` is the error message string if
+        the executed code raised, otherwise ``None``. ``exception`` is a
+        ``SafeExecException`` when the code raised, otherwise ``None``.
     """
+    code = data["code"]
+    globals_dict = data["globals_dict"]
+    python_path = data.get("python_path") or []
+    extra_files = data.get("extra_files") or []
+    slug = data.get("slug")
+    limit_overrides_context = data.get("limit_overrides_context")
 
-    def __init__(self):
-        self.old_be_unsafe = None
-        super().__init__()
+    original_path = list(sys.path)
+    original_modules = set(sys.modules.keys())
 
-    def enable(self):
-        """Enable unsafe mode for codejail within the test scope."""
-        self.old_be_unsafe = codejail.safe_exec.ALWAYS_BE_UNSAFE
-        codejail.safe_exec.ALWAYS_BE_UNSAFE = True
-
-    def disable(self):
-        """Restore the previous codejail unsafe mode state."""
-        codejail.safe_exec.ALWAYS_BE_UNSAFE = self.old_be_unsafe
+    try:
+        not_safe_exec(
+            code,
+            globals_dict,
+            python_path=python_path,
+            extra_files=extra_files,
+            slug=slug,
+            limit_overrides_context=limit_overrides_context,
+        )
+    except SafeExecException as exc:
+        return str(exc), exc
+    finally:
+        sys.path = original_path
+        for mod_name in list(sys.modules.keys()):
+            if mod_name not in original_modules:
+                del sys.modules[mod_name]
+        for archive_path in python_path:
+            if importer := sys.path_importer_cache.get(archive_path):
+                importer.invalidate_caches()
+        sys.path_importer_cache.clear()
+    return None, None

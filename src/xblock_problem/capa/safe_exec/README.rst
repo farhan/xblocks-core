@@ -1,43 +1,29 @@
 Configuring Capa sandboxed execution
 ====================================
 
-Capa problems can contain code authored by the course author.  We need to
-execute that code in a sandbox.  We use CodeJail as the sandboxing facility,
-but it needs to be configured specifically for Capa's use.
+Capa problem code is executed in a sandbox provided by `CodeJail`_. This package
+sends code to a remote `codejail-service`_ over its REST API.
 
-As a developer, you don't have to do anything to configure sandboxing if you
-don't want to, and everything will operate properly, you just won't have
-protection on that code.
+By default, tests mock the service request and execute code locally using
+CodeJail's ``not_safe_exec`` function. This avoids requiring a running service
+in CI but does not test sandbox isolation.
 
-If you want to configure sandboxing, you're going to use the `README from
-CodeJail`__, with a few customized tweaks.
+For local testing against the service, follow the `deployment instructions`_.
+The service can also be deployed with the `CodeJail Tutor plugin`_; Tutor must
+run in dev mode to expose the service's HTTP port outside the Docker network.
+Then set these values in ``test_settings.py``:
 
-__ https://github.com/openedx/codejail/blob/master/README.rst
+.. code-block:: python
 
+    CODE_JAIL_REST_SERVICE_REMOTE_EXEC = (
+        "xblock_problem.capa.safe_exec.remote_exec.send_safe_exec_request_v0"
+    )
+    CODE_JAIL_REST_SERVICE_HOST = "http://localhost:8550"
 
-1. At the instruction to install packages into the sandboxed code, you'll
-   need to install the requirements from requirements/edx-sandbox::
+Configuration for ``codejail-service``, including sandbox limits, is managed by
+the service.
 
-    $ pip install -r requirements/edx-sandbox/base.txt
-
-2. You can configure resource limits in settings.py.  A CODE_JAIL setting is
-   available, a dictionary.  The "limits" key lets you adjust the limits for
-   CPU time, real time, and memory use.  Setting any of them to zero disables
-   that limit::
-
-    # in settings.py...
-    CODE_JAIL = {
-        # Configurable limits.
-        'limits': {
-            # How many CPU seconds can jailed code use?
-            'CPU': 1,
-            # How many real-time seconds will a sandbox survive?
-            'REALTIME': 1,
-            # How much memory (in bytes) can a sandbox use?
-            'VMEM': 30000000,
-        },
-    }
-
-
-That's it.  Once you've finished the CodeJail configuration instructions,
-your course-hosted Python code should be run securely.
+.. _CodeJail: https://github.com/openedx/codejail
+.. _codejail-service: https://github.com/openedx/codejail-service
+.. _deployment instructions: https://github.com/openedx/codejail-service/blob/main/docs/deployment.rst
+.. _CodeJail Tutor plugin: https://github.com/eduNEXT/tutor-contrib-codejail
