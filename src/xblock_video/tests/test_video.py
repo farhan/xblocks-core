@@ -28,6 +28,7 @@ from fs.osfs import OSFS
 from lxml import etree
 from opaque_keys.edx.keys import CourseKey
 from opaque_keys.edx.locator import CourseLocator
+from web_fragments.fragment import Fragment
 from xblock.core import XBlockAside
 from xblock.field_data import DictFieldData
 from xblock.fields import ScopeIds
@@ -1220,3 +1221,45 @@ class VideoBlockIndexingTestCase(unittest.TestCase):
         response = block.get_transcripts_info()
         expected = {"transcripts": {}, "sub": ""}
         assert expected == response
+
+
+class VideoBlockI18nJsCatalogTest(unittest.TestCase):
+    """Tests for loading the block's namespaced JavaScript translation catalog."""
+
+    # pylint: disable=protected-access
+
+    def _block_with_i18n_service(self, i18n_service):
+        block = Mock()
+        block.runtime.service.return_value = i18n_service
+        return block
+
+    def test_namespace(self):
+        assert VideoBlock.i18n_js_namespace == "XBlockVideoI18N"
+        assert VideoBlock.get_i18n_js_namespace() == "XBlockVideoI18N"
+
+    def test_adds_catalog_url(self):
+        i18n_service = Mock()
+        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/js/xblock.v1-i18n/xblock_video/ar.js"
+        block = self._block_with_i18n_service(i18n_service)
+        fragment = Fragment()
+
+        VideoBlock._add_i18n_js_catalog(block, fragment)
+
+        i18n_service.get_javascript_i18n_catalog_url.assert_called_once_with(block)
+        assert [r.data for r in fragment.resources] == ["/static/js/xblock.v1-i18n/xblock_video/ar.js"]
+
+    def test_no_catalog(self):
+        i18n_service = Mock()
+        i18n_service.get_javascript_i18n_catalog_url.return_value = None
+        fragment = Fragment()
+
+        VideoBlock._add_i18n_js_catalog(self._block_with_i18n_service(i18n_service), fragment)
+
+        assert not fragment.resources
+
+    def test_service_without_catalog_support(self):
+        fragment = Fragment()
+
+        VideoBlock._add_i18n_js_catalog(self._block_with_i18n_service(Mock(spec=[])), fragment)
+
+        assert not fragment.resources

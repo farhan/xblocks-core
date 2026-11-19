@@ -2,9 +2,10 @@
 
 import json
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 from lxml import etree
+from web_fragments.fragment import Fragment
 from xblock.field_data import DictFieldData
 from xblock.fields import ScopeIds
 from xblock.test.tools import TestRuntime
@@ -159,3 +160,60 @@ class AnnotatableBlockTestCase(unittest.TestCase):
         self.assertEqual(response_body["result"], "success")
         self.assertEqual(self.annotatable.display_name, "New Display Name")
         self.assertEqual(self.annotatable.data, self.sample_xml)
+
+
+class AnnotatableBlockI18nJsCatalogTest(unittest.TestCase):
+    """Tests for loading the block's namespaced JavaScript translation catalog."""
+
+    # pylint: disable=protected-access
+
+    def _block_with_i18n_service(self, i18n_service):
+        block = Mock()
+        block.runtime.service.return_value = i18n_service
+        return block
+
+    def test_namespace(self):
+        assert AnnotatableBlock.i18n_js_namespace == "XBlockAnnotatableI18N"
+        assert AnnotatableBlock.get_i18n_js_namespace() == "XBlockAnnotatableI18N"
+
+    def test_adds_catalog_url(self):
+        i18n_service = Mock()
+        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/js/xblock.v1-i18n/xblock_annotatable/ar.js"
+        block = self._block_with_i18n_service(i18n_service)
+        fragment = Fragment()
+
+        AnnotatableBlock._add_i18n_js_catalog(block, fragment)
+
+        i18n_service.get_javascript_i18n_catalog_url.assert_called_once_with(block)
+        assert [r.data for r in fragment.resources] == ["/static/js/xblock.v1-i18n/xblock_annotatable/ar.js"]
+
+    def test_no_catalog(self):
+        i18n_service = Mock()
+        i18n_service.get_javascript_i18n_catalog_url.return_value = None
+        fragment = Fragment()
+
+        AnnotatableBlock._add_i18n_js_catalog(self._block_with_i18n_service(i18n_service), fragment)
+
+        assert not fragment.resources
+
+    def test_service_without_catalog_support(self):
+        fragment = Fragment()
+
+        AnnotatableBlock._add_i18n_js_catalog(self._block_with_i18n_service(Mock(spec=[])), fragment)
+
+        assert not fragment.resources
+
+    def test_student_view_loads_catalog_before_block_js(self):
+        runtime = TestRuntime()
+        block = AnnotatableBlock(
+            runtime,
+            DictFieldData({"data": AnnotatableBlockTestCase.sample_xml}),
+            ScopeIds("user_id", "block_type", "block_id", "context_key"),
+        )
+        with patch("xblock.runtime.NullI18nService.get_javascript_i18n_catalog_url", return_value="/static/catalog.js"):
+            fragment = block.student_view()
+
+        js = [r for r in fragment.resources if r.mimetype == "application/javascript"]
+        assert js[0].kind == "url"
+        assert js[0].data == "/static/catalog.js"
+        assert "function Annotatable(" in js[1].data
