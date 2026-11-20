@@ -4213,3 +4213,23 @@ class ProblemBlockI18nJsCatalogTest(unittest.TestCase):
         ProblemBlock._add_i18n_js_catalog(self._block_with_i18n_service(Mock(spec=[])), fragment)
 
         assert not fragment.resources
+
+    def test_student_view_loads_catalog_before_block_js(self):
+        block = CapaFactory.create()
+        real_service = block.runtime.service
+        i18n_service = Mock()
+        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/catalog.js"
+
+        def service(blk, name):
+            return i18n_service if name == "i18n" else real_service(blk, name)
+
+        with (
+            patch.object(ProblemBlock, "get_html", return_value="<div></div>"),
+            patch.object(block.runtime, "service", side_effect=service),
+            patch.object(block.runtime, "local_resource_url", side_effect=lambda _block, uri: f"/{uri}"),
+        ):
+            fragment = block.student_view({})
+
+        js = [r for r in fragment.resources if r.mimetype == "application/javascript"]
+        assert [r.data for r in js[:1]] == ["/static/catalog.js"]
+        assert js[1].data.endswith("ProblemBlockDisplay.js")
