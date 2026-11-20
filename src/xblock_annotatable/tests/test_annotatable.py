@@ -165,43 +165,23 @@ class AnnotatableBlockTestCase(unittest.TestCase):
 class AnnotatableBlockI18nJsCatalogTest(unittest.TestCase):
     """Tests for loading the block's namespaced JavaScript translation catalog."""
 
-    # pylint: disable=protected-access
-
-    def _block_with_i18n_service(self, i18n_service):
-        block = Mock()
-        block.runtime.service.return_value = i18n_service
-        return block
-
     def test_namespace(self):
         assert AnnotatableBlock.i18n_js_namespace == "XBlockAnnotatableI18N"
         assert AnnotatableBlock.get_i18n_js_namespace() == "XBlockAnnotatableI18N"
 
-    def test_adds_catalog_url(self):
-        i18n_service = Mock()
-        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/js/xblock.v1-i18n/xblock_annotatable/ar.js"
-        block = self._block_with_i18n_service(i18n_service)
-        fragment = Fragment()
+    def test_no_catalog_without_url(self):
+        """No script is added when there is no catalog or the i18n service can't provide one."""
+        no_catalog = Mock()
+        no_catalog.get_javascript_i18n_catalog_url.return_value = None
+        for i18n_service in (no_catalog, Mock(spec=[])):
+            with self.subTest(i18n_service=i18n_service):
+                block = Mock()
+                block.runtime.service.return_value = i18n_service
+                fragment = Fragment()
 
-        AnnotatableBlock._add_i18n_js_catalog(block, fragment)
+                AnnotatableBlock._add_i18n_js_catalog(block, fragment)  # pylint: disable=protected-access
 
-        i18n_service.get_javascript_i18n_catalog_url.assert_called_once_with(block)
-        assert [r.data for r in fragment.resources] == ["/static/js/xblock.v1-i18n/xblock_annotatable/ar.js"]
-
-    def test_no_catalog(self):
-        i18n_service = Mock()
-        i18n_service.get_javascript_i18n_catalog_url.return_value = None
-        fragment = Fragment()
-
-        AnnotatableBlock._add_i18n_js_catalog(self._block_with_i18n_service(i18n_service), fragment)
-
-        assert not fragment.resources
-
-    def test_service_without_catalog_support(self):
-        fragment = Fragment()
-
-        AnnotatableBlock._add_i18n_js_catalog(self._block_with_i18n_service(Mock(spec=[])), fragment)
-
-        assert not fragment.resources
+                assert not fragment.resources
 
     def test_student_view_loads_catalog_before_block_js(self):
         runtime = TestRuntime()

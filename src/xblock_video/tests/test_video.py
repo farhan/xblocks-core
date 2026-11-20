@@ -1226,79 +1226,47 @@ class VideoBlockIndexingTestCase(unittest.TestCase):
 class VideoBlockI18nJsCatalogTest(unittest.TestCase):
     """Tests for loading the block's namespaced JavaScript translation catalog."""
 
-    # pylint: disable=protected-access
-
-    def _block_with_i18n_service(self, i18n_service):
-        block = Mock()
-        block.runtime.service.return_value = i18n_service
-        return block
-
     def test_namespace(self):
         assert VideoBlock.i18n_js_namespace == "XBlockVideoI18N"
         assert VideoBlock.get_i18n_js_namespace() == "XBlockVideoI18N"
 
-    def test_adds_catalog_url(self):
+    def test_no_catalog_without_url(self):
+        """No script is added when there is no catalog or the i18n service can't provide one."""
+        no_catalog = Mock()
+        no_catalog.get_javascript_i18n_catalog_url.return_value = None
+        for i18n_service in (no_catalog, Mock(spec=[])):
+            with self.subTest(i18n_service=i18n_service):
+                block = Mock()
+                block.runtime.service.return_value = i18n_service
+                fragment = Fragment()
+
+                VideoBlock._add_i18n_js_catalog(block, fragment)  # pylint: disable=protected-access
+
+                assert not fragment.resources
+
+    def _view_js_with_catalog(self, block, view_name, context):
+        """Render ``view_name`` with an i18n service that has a catalog and return the JS resources."""
+        real_service = block.runtime.service
         i18n_service = Mock()
-        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/js/xblock.v1-i18n/xblock_video/ar.js"
-        block = self._block_with_i18n_service(i18n_service)
-        fragment = Fragment()
+        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/catalog.js"
 
-        VideoBlock._add_i18n_js_catalog(block, fragment)
+        def service(blk, name):
+            return i18n_service if name == "i18n" else real_service(blk, name)
 
-        i18n_service.get_javascript_i18n_catalog_url.assert_called_once_with(block)
-        assert [r.data for r in fragment.resources] == ["/static/js/xblock.v1-i18n/xblock_video/ar.js"]
+        with (
+            patch.object(VideoBlock, "get_html", return_value="<div></div>"),
+            patch.object(block.runtime, "service", side_effect=service),
+            patch.object(block.runtime, "local_resource_url", side_effect=lambda _block, uri: f"/{uri}"),
+        ):
+            fragment = getattr(block, view_name)(context)
 
-    def test_no_catalog(self):
-        i18n_service = Mock()
-        i18n_service.get_javascript_i18n_catalog_url.return_value = None
-        fragment = Fragment()
-
-        VideoBlock._add_i18n_js_catalog(self._block_with_i18n_service(i18n_service), fragment)
-
-        assert not fragment.resources
-
-    def test_service_without_catalog_support(self):
-        fragment = Fragment()
-
-        VideoBlock._add_i18n_js_catalog(self._block_with_i18n_service(Mock(spec=[])), fragment)
-
-        assert not fragment.resources
+        return [r.data for r in fragment.resources if r.mimetype == "application/javascript"]
 
     def test_student_view_loads_catalog_before_block_js(self):
-        block = instantiate_block()
-        real_service = block.runtime.service
-        i18n_service = Mock()
-        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/catalog.js"
-
-        def service(blk, name):
-            return i18n_service if name == "i18n" else real_service(blk, name)
-
-        with (
-            patch.object(VideoBlock, "get_html", return_value="<div></div>"),
-            patch.object(block.runtime, "service", side_effect=service),
-            patch.object(block.runtime, "local_resource_url", side_effect=lambda _block, uri: f"/{uri}"),
-        ):
-            fragment = block.student_view({})
-
-        js = [r for r in fragment.resources if r.mimetype == "application/javascript"]
-        assert [r.data for r in js[:1]] == ["/static/catalog.js"]
-        assert js[1].data.endswith("video-xblock.js")
+        js = self._view_js_with_catalog(instantiate_block(), "student_view", {})
+        assert js[0] == "/static/catalog.js"
+        assert js[1].endswith("video-xblock.js")
 
     def test_public_view_loads_catalog_before_block_js(self):
-        block = instantiate_block()
-        i18n_service = Mock()
-        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/catalog.js"
-        real_service = block.runtime.service
-
-        def service(blk, name):
-            return i18n_service if name == "i18n" else real_service(blk, name)
-
-        with (
-            patch.object(VideoBlock, "get_html", return_value="<div></div>"),
-            patch.object(block.runtime, "service", side_effect=service),
-            patch.object(block.runtime, "local_resource_url", side_effect=lambda _block, uri: f"/{uri}"),
-        ):
-            fragment = block.public_view({"public_video_embed": True})
-
-        js = [r.data for r in fragment.resources if r.mimetype == "application/javascript"]
+        js = self._view_js_with_catalog(instantiate_block(), "public_view", {"public_video_embed": True})
         assert js == ["/static/catalog.js", "/public/js/video-xblock.js"]

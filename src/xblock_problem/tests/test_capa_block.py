@@ -4176,46 +4176,26 @@ class ProblemBlockReportGenerationTest(unittest.TestCase):
 class ProblemBlockI18nJsCatalogTest(unittest.TestCase):
     """Tests for loading the block's namespaced JavaScript translation catalog."""
 
-    # pylint: disable=protected-access
-
-    def _block_with_i18n_service(self, i18n_service):
-        block = Mock()
-        block.runtime.service.return_value = i18n_service
-        return block
-
     def test_namespace(self):
         assert ProblemBlock.i18n_js_namespace == "XBlockProblemI18N"
         assert ProblemBlock.get_i18n_js_namespace() == "XBlockProblemI18N"
 
-    def test_adds_catalog_url(self):
-        i18n_service = Mock()
-        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/js/xblock.v1-i18n/xblock_problem/ar.js"
-        block = self._block_with_i18n_service(i18n_service)
-        fragment = Fragment()
+    def test_no_catalog_without_url(self):
+        """No script is added when there is no catalog or the i18n service can't provide one."""
+        no_catalog = Mock()
+        no_catalog.get_javascript_i18n_catalog_url.return_value = None
+        for i18n_service in (no_catalog, Mock(spec=[])):
+            with self.subTest(i18n_service=i18n_service):
+                block = Mock()
+                block.runtime.service.return_value = i18n_service
+                fragment = Fragment()
 
-        ProblemBlock._add_i18n_js_catalog(block, fragment)
+                ProblemBlock._add_i18n_js_catalog(block, fragment)  # pylint: disable=protected-access
 
-        i18n_service.get_javascript_i18n_catalog_url.assert_called_once_with(block)
-        assert [r.data for r in fragment.resources] == ["/static/js/xblock.v1-i18n/xblock_problem/ar.js"]
+                assert not fragment.resources
 
-    def test_no_catalog(self):
-        i18n_service = Mock()
-        i18n_service.get_javascript_i18n_catalog_url.return_value = None
-        fragment = Fragment()
-
-        ProblemBlock._add_i18n_js_catalog(self._block_with_i18n_service(i18n_service), fragment)
-
-        assert not fragment.resources
-
-    def test_service_without_catalog_support(self):
-        fragment = Fragment()
-
-        ProblemBlock._add_i18n_js_catalog(self._block_with_i18n_service(Mock(spec=[])), fragment)
-
-        assert not fragment.resources
-
-    def test_student_view_loads_catalog_before_block_js(self):
-        block = CapaFactory.create()
+    def _view_js_with_catalog(self, block, view_name, context):
+        """Render ``view_name`` with an i18n service that has a catalog and return the JS resources."""
         real_service = block.runtime.service
         i18n_service = Mock()
         i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/catalog.js"
@@ -4228,8 +4208,11 @@ class ProblemBlockI18nJsCatalogTest(unittest.TestCase):
             patch.object(block.runtime, "service", side_effect=service),
             patch.object(block.runtime, "local_resource_url", side_effect=lambda _block, uri: f"/{uri}"),
         ):
-            fragment = block.student_view({})
+            fragment = getattr(block, view_name)(context)
 
-        js = [r for r in fragment.resources if r.mimetype == "application/javascript"]
-        assert [r.data for r in js[:1]] == ["/static/catalog.js"]
-        assert js[1].data.endswith("ProblemBlockDisplay.js")
+        return [r.data for r in fragment.resources if r.mimetype == "application/javascript"]
+
+    def test_student_view_loads_catalog_before_block_js(self):
+        js = self._view_js_with_catalog(CapaFactory.create(), "student_view", {})
+        assert js[0] == "/static/catalog.js"
+        assert js[1].endswith("ProblemBlockDisplay.js")
