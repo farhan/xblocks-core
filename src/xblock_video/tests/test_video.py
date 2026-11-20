@@ -1283,3 +1283,22 @@ class VideoBlockI18nJsCatalogTest(unittest.TestCase):
         js = [r for r in fragment.resources if r.mimetype == "application/javascript"]
         assert [r.data for r in js[:1]] == ["/static/catalog.js"]
         assert js[1].data.endswith("video-xblock.js")
+
+    def test_public_view_loads_catalog_before_block_js(self):
+        block = instantiate_block()
+        i18n_service = Mock()
+        i18n_service.get_javascript_i18n_catalog_url.return_value = "/static/catalog.js"
+        real_service = block.runtime.service
+
+        def service(blk, name):
+            return i18n_service if name == "i18n" else real_service(blk, name)
+
+        with (
+            patch.object(VideoBlock, "get_html", return_value="<div></div>"),
+            patch.object(block.runtime, "service", side_effect=service),
+            patch.object(block.runtime, "local_resource_url", side_effect=lambda _block, uri: f"/{uri}"),
+        ):
+            fragment = block.public_view({"public_video_embed": True})
+
+        js = [r.data for r in fragment.resources if r.mimetype == "application/javascript"]
+        assert js == ["/static/catalog.js", "/public/js/video-xblock.js"]
