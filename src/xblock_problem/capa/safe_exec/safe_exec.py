@@ -195,7 +195,8 @@ def safe_exec(
     except (CodejailServiceUnavailable, CodejailServiceStatusError, CodejailServiceParseError) as err:
         if gettext is None or not err.args:
             raise
-        raise type(err)(gettext(str(err.args[0]))) from err.__cause__
+        # The messages are marked with gettext_noop in remote_exec, so translating a variable is intended.
+        raise type(err)(gettext(str(err.args[0]))) from err  # pylint: disable=translation-of-non-string
 
     # Put the result back in the cache.  This is complicated by the fact that
     # the globals dict might not be entirely serializable.
