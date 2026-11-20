@@ -7,21 +7,38 @@
  *
  * Webpack's ProvidePlugin injects these wherever the bundle uses `gettext` or `ngettext`, so
  * call sites stay unchanged.
+ *
+ * Written as UMD so Karma, which loads the raw files rather than the bundle, can test it through
+ * `window.XBlockProblemI18nUtils`.
  */
+(function(root, factory) {
+    'use strict';
 
-function catalog() {
-    return window.XBlockProblemI18N || window;
-}
-
-export function gettext(msgid) {
-    const ns = catalog();
-    return ns.gettext ? ns.gettext(msgid) : msgid;
-}
-
-export function ngettext(singular, plural, count) {
-    const ns = catalog();
-    if (ns.ngettext) {
-        return ns.ngettext(singular, plural, count);
+    var api = factory(root);
+    if (typeof module === 'object' && module.exports) {
+        module.exports = api;
+    } else {
+        root.XBlockProblemI18nUtils = api;
     }
-    return count === 1 ? singular : plural;
-}
+}(typeof window !== 'undefined' ? window : this, function(root) {
+    'use strict';
+
+    function catalog() {
+        return root.XBlockProblemI18N || root;
+    }
+
+    function gettext(msgid) {
+        var ns = catalog();
+        return ns.gettext ? ns.gettext(msgid) : msgid;
+    }
+
+    function ngettext(singular, plural, count) {
+        var ns = catalog();
+        if (ns.ngettext) {
+            return ns.ngettext(singular, plural, count);
+        }
+        return count === 1 ? singular : plural;
+    }
+
+    return {gettext: gettext, ngettext: ngettext};
+}));
